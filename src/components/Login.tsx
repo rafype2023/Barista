@@ -93,6 +93,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             <h1 className="text-3xl font-bold text-brand-text-primary mb-2">Verificar Código</h1>
             <p className="text-brand-text-secondary mb-6">
               Enviamos un código a <span className="font-semibold text-brand-text-primary">{email}</span>.
+              <br/> (Pista: usa 123456)
             </p>
             {error && <p className="bg-red-100 text-red-700 p-3 rounded-md mb-4">{error}</p>}
             <div className="mb-6">
