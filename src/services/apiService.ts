@@ -3,6 +3,9 @@ import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// In-memory store for verification codes for this simulation
+const verificationCodes: { [email: string]: string } = {};
+
 const products: Product[] = [
     { 
       id: '1', 
@@ -103,15 +106,49 @@ export const api = {
       throw new Error("Image generation failed to return an image.");
     } catch (error) {
       console.error(`Error generating image for ${productName}:`, error);
-      // Return a fallback placeholder image on error
       return 'https://placehold.co/250x250/F7F4EF/2C2C2C?text=No+Image';
     }
   },
 
-  sendVerificationCode: (name: string, email: string): Promise<{ success: boolean }> => {
-    console.log(`Simulating sending verification code to ${email} for user ${name}`);
-    // In a real app, this would trigger a service like SendGrid.
-    return delay({ success: true }, 1000);
+  sendVerificationCode: async (name: string, email: string): Promise<{ success: boolean }> => {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    verificationCodes[email] = code;
+    console.log(`Verification code for ${email}: ${code}`); // For debugging
+
+    const sendgridApiKey = process.env.SENDGRID_API_KEY;
+    if (!sendgridApiKey) {
+      console.error("SendGrid API key is not configured.");
+      // In a real app, you might want to return success: false here,
+      // but for this demo, we'll allow it to proceed to show the code in the console.
+      return { success: true };
+    }
+
+    const emailBody = {
+      personalizations: [{ to: [{ email }] }],
+      from: { email: "no-reply@baristacoffee.app", name: "Barista Coffee" },
+      subject: "Tu código de verificación",
+      content: [{ type: "text/plain", value: `Hola ${name},\n\nTu código de verificación es: ${code}\n\nGracias,\nEl equipo de Barista Coffee` }],
+    };
+    
+    try {
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sendgridApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(emailBody)
+      });
+      if (response.ok) {
+        return { success: true };
+      } else {
+        console.error("Failed to send email via SendGrid:", await response.text());
+        return { success: false };
+      }
+    } catch(error) {
+      console.error("Error calling SendGrid API:", error);
+      return { success: false };
+    }
   },
 
   verifyCodeAndPlaceOrder: (
@@ -121,17 +158,18 @@ export const api = {
     cart: { [key: string]: number },
     total: number
   ): Promise<{ success: boolean; order?: Order }> => {
-    console.log(`Verifying code ${code} for ${email} and placing order for ${name}`);
-    if (code === '123456') { // Mock success code
+    if (verificationCodes[email] && verificationCodes[email] === code) {
+      delete verificationCodes[email]; // Code is single-use
+
       const newOrder: Order = {
         id: `ord${Date.now()}`,
         userName: name,
         total,
         status: 'confirmed'
       };
-      // This allows the function to be used for login verification without creating an empty order.
+      
       if (total > 0) {
-        confirmedOrders.unshift(newOrder); // Add to the top of the list
+        confirmedOrders.unshift(newOrder);
       }
       return delay({ success: true, order: newOrder }, 1500);
     }
