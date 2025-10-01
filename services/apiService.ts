@@ -1,3 +1,4 @@
+
 import { Product, Order, User } from '../types';
 import { GoogleGenAI } from "@google/genai";
 
@@ -129,7 +130,6 @@ export const api = {
         total,
         status: 'confirmed'
       };
-      // FIX: Only add to confirmed orders if it's a real order with a total > 0.
       // This allows the function to be used for login verification without creating an empty order.
       if (total > 0) {
         confirmedOrders.unshift(newOrder); // Add to the top of the list

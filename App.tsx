@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Product, CartItem, Order, SizeOption } from './types';
+import type { Product, CartItem, Order, SizeOption, User } from './types';
 import { api } from './services/apiService';
 import { CheckIcon, PlusIcon, MinusIcon, ChevronRightIcon, SpinnerIcon } from './components/icons';
+import Login from './components/Login';
 
 // --- Verification Modal Component ---
 
@@ -170,9 +172,7 @@ const Cart: React.FC<{
     isPlacingOrder: boolean;
     userName: string;
     userEmail: string;
-    onUserNameChange: (name: string) => void;
-    onUserEmailChange: (email: string) => void;
-}> = ({ cartItems, total, onPlaceOrder, isPlacingOrder, userName, userEmail, onUserNameChange, onUserEmailChange }) => (
+}> = ({ cartItems, total, onPlaceOrder, isPlacingOrder, userName, userEmail }) => (
     <aside className="bg-brand-surface p-6 rounded-xl shadow-md sticky top-8">
         <h2 className="text-xl font-bold text-brand-text-primary mb-4">Tu Pedido</h2>
         <div className="mb-4 space-y-3">
@@ -182,8 +182,8 @@ const Cart: React.FC<{
                     type="text"
                     id="name"
                     value={userName}
-                    onChange={e => onUserNameChange(e.target.value)}
-                    className="w-full px-4 py-3 border border-brand-border rounded-lg focus:ring-2 focus:ring-brand-secondary focus:border-brand-secondary outline-none transition"
+                    readOnly
+                    className="w-full px-4 py-3 border border-brand-border rounded-lg bg-brand-muted cursor-not-allowed outline-none"
                     placeholder="Tu nombre"
                     required
                 />
@@ -194,8 +194,8 @@ const Cart: React.FC<{
                     type="email"
                     id="email"
                     value={userEmail}
-                    onChange={e => onUserEmailChange(e.target.value)}
-                    className="w-full px-4 py-3 border border-brand-border rounded-lg focus:ring-2 focus:ring-brand-secondary focus:border-brand-secondary outline-none transition"
+                    readOnly
+                    className="w-full px-4 py-3 border border-brand-border rounded-lg bg-brand-muted cursor-not-allowed outline-none"
                     placeholder="tu.correo@empresa.com"
                     required
                 />
@@ -255,14 +255,13 @@ const ConfirmedOrders: React.FC<{ orders: Order[] }> = ({ orders }) => (
 // --- Main App Component ---
 
 function App() {
+    const [user, setUser] = useState<User | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
     const [confirmedOrders, setConfirmedOrders] = useState<Order[]>([]);
     const [cart, setCart] = useState<{ [key: string]: CartItem }>({});
     const [isLoading, setIsLoading] = useState(true);
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
-    const [userName, setUserName] = useState('');
-    const [userEmail, setUserEmail] = useState('');
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -299,8 +298,15 @@ function App() {
                 setIsLoading(false);
             }
         };
-        fetchInitialData();
-    }, []);
+
+        if (user) {
+          fetchInitialData();
+        }
+    }, [user]);
+
+    const handleLoginSuccess = (loggedInUser: User) => {
+        setUser(loggedInUser);
+    };
 
     const handleQuantityChange = useCallback((product: Product, size: SizeOption, newQuantity: number) => {
         setCart(currentCart => {
@@ -324,9 +330,9 @@ function App() {
     }, []);
 
     const handlePlaceOrder = async () => {
-        if (!userName || !userEmail) return;
+        if (!user) return;
         setIsPlacingOrder(true);
-        const response = await api.sendVerificationCode(userName, userEmail);
+        const response = await api.sendVerificationCode(user.name, user.email);
         setIsPlacingOrder(false);
 
         if (response.success) {
@@ -337,18 +343,18 @@ function App() {
     };
 
     const handleVerifyAndSubmitOrder = async (code: string): Promise<boolean> => {
+        if (!user) return false;
+
         const orderDetails = Object.values(cart).reduce((acc, item) => {
             acc[item.productId] = (acc[item.productId] || 0) + item.quantity;
             return acc;
         }, {} as { [key: string]: number });
 
-        const response = await api.verifyCodeAndPlaceOrder(userName, userEmail, code, orderDetails, cartTotal);
+        const response = await api.verifyCodeAndPlaceOrder(user.name, user.email, code, orderDetails, cartTotal);
 
         if (response.success && response.order) {
             setConfirmedOrders(prevOrders => [response.order!, ...prevOrders]);
             setCart({});
-            setUserName('');
-            setUserEmail('');
             setIsVerifying(false);
             return true;
         } else {
@@ -359,13 +365,17 @@ function App() {
     const cartItems = useMemo(() => Object.values(cart).sort((a, b) => a.name.localeCompare(b.name)), [cart]);
     const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0), [cartItems]);
 
+    if (!user) {
+      return <Login onLoginSuccess={handleLoginSuccess} />
+    }
+
     if (isLoading && products.length === 0) {
         return <div className="min-h-screen flex items-center justify-center"><SpinnerIcon className="animate-spin h-12 w-12 text-brand-primary" /></div>;
     }
 
     return (
         <div className="container mx-auto p-4 sm:p-8 font-sans text-brand-text-primary">
-            <Header userName={userName} />
+            <Header userName={user.name} />
             <main className="grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
                 <div className="lg:col-span-2 space-y-4">
                     {products.map(product => (
@@ -384,17 +394,15 @@ function App() {
                         total={cartTotal} 
                         onPlaceOrder={handlePlaceOrder} 
                         isPlacingOrder={isPlacingOrder}
-                        userName={userName}
-                        userEmail={userEmail}
-                        onUserNameChange={setUserName}
-                        onUserEmailChange={setUserEmail}
+                        userName={user.name}
+                        userEmail={user.email}
                     />
                    <ConfirmedOrders orders={confirmedOrders} />
                 </div>
             </main>
             {isVerifying && (
                 <VerificationModal 
-                    email={userEmail}
+                    email={user.email}
                     onClose={() => setIsVerifying(false)}
                     onSubmit={handleVerifyAndSubmitOrder}
                 />

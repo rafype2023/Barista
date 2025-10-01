@@ -24,7 +24,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
     setError('');
     setIsLoading(true);
-    // FIX: Corrected api method from 'login' to 'sendVerificationCode'
     const response = await api.sendVerificationCode(name, email);
     setIsLoading(false);
     if (response.success) {
@@ -42,11 +41,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
     setError('');
     setIsLoading(true);
-    // FIX: Corrected api method from 'verifyCode' to 'verifyCodeAndPlaceOrder' and passed necessary arguments.
     // For a login-only flow, we pass an empty cart and zero total.
     const response = await api.verifyCodeAndPlaceOrder(name, email, code, {}, 0);
     setIsLoading(false);
-    // FIX: Adjusted logic to handle the response from verifyCodeAndPlaceOrder, which returns an order object.
     if (response.success && response.order) {
       onLoginSuccess({ id: email, name, email });
     } else {
@@ -117,7 +114,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               disabled={isLoading}
               className="w-full bg-brand-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-primary-hover transition-colors flex items-center justify-center disabled:opacity-50"
             >
-              {isLoading ? <SpinnerIcon className="animate-spin h-5 w-5" /> : 'Confirmar y Ordenar'}
+              {isLoading ? <SpinnerIcon className="animate-spin h-5 w-5" /> : 'Verificar e Ingresar'}
             </button>
              <button
               type="button"
