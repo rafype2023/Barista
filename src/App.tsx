@@ -4,6 +4,47 @@ import { api } from './services/apiService';
 import { CheckIcon, PlusIcon, MinusIcon, ChevronRightIcon, SpinnerIcon } from './components/icons';
 import Login from './components/Login';
 
+// --- Order Summary Modal Component ---
+const OrderSummaryModal: React.FC<{
+    order: Order;
+    items: CartItem[];
+    onClose: () => void;
+}> = ({ order, items, onClose }) => (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" aria-modal="true" role="dialog">
+        <div className="w-full max-w-md bg-brand-surface p-8 rounded-2xl shadow-lg text-center">
+            <div className="mx-auto bg-green-100 rounded-full h-16 w-16 flex items-center justify-center mb-4">
+                <CheckIcon className="h-8 w-8 text-green-600" />
+            </div>
+            <h2 className="text-3xl font-bold text-brand-text-primary mb-2">¡Pedido Confirmado!</h2>
+            <p className="text-brand-text-secondary mb-6">Gracias por tu pedido, {order.userName}. Estará listo pronto.</p>
+            
+            <div className="bg-brand-muted p-4 rounded-lg text-left mb-6">
+                <h3 className="font-bold text-brand-text-primary mb-2">Resumen del Pedido</h3>
+                {items.map(item => (
+                    <div key={item.id} className="flex justify-between items-baseline text-brand-text-secondary text-sm mb-1">
+                        <span>{item.quantity}x {item.name} ({item.size})</span>
+                        <span>${(item.price * item.quantity).toFixed(2)}</span>
+                    </div>
+                ))}
+                <div className="border-t border-brand-border my-2"></div>
+                <div className="flex justify-between items-center">
+                    <span className="font-semibold text-brand-text-primary">TOTAL</span>
+                    <span className="font-bold text-brand-text-primary text-lg">${order.total.toFixed(2)}</span>
+                </div>
+            </div>
+
+            <button
+                type="button"
+                onClick={onClose}
+                className="w-full bg-brand-primary text-white font-bold py-3 px-4 rounded-lg hover:bg-brand-primary-hover transition-colors"
+            >
+                Entendido
+            </button>
+        </div>
+    </div>
+);
+
+
 // --- Verification Modal Component ---
 
 const VerificationModal: React.FC<{
@@ -37,7 +78,6 @@ const VerificationModal: React.FC<{
                     <h2 className="text-3xl font-bold text-brand-text-primary mb-2">Verificar Pedido</h2>
                     <p className="text-brand-text-secondary mb-6">
                         Enviamos un código a <span className="font-semibold text-brand-text-primary">{email}</span>.
-                        <br /> (Pista: usa 123456)
                     </p>
                     {error && <p className="bg-red-100 text-red-700 p-3 rounded-md mb-4" role="alert">{error}</p>}
                     <div className="mb-6">
@@ -79,15 +119,17 @@ const VerificationModal: React.FC<{
 
 // --- Reusable Child Components ---
 
-const Header: React.FC<{ userName: string }> = ({ userName }) => (
+const Header: React.FC<{ user: User }> = ({ user }) => (
     <header className="bg-brand-muted p-6 rounded-xl flex justify-between items-center mb-8 shadow-sm">
-        <h1 className="text-4xl font-bold text-brand-text-primary">Hola, {userName || 'Cliente'}!</h1>
-        <button className="flex items-center gap-3 text-brand-text-primary font-semibold text-lg bg-brand-surface px-5 py-3 rounded-full shadow-sm hover:shadow-md transition-shadow">
-            <span className="bg-brand-secondary text-white rounded-full h-8 w-8 flex items-center justify-center">
-                <CheckIcon className="h-5 w-5" />
-            </span>
-            Ver Panel Barista
-        </button>
+        <h1 className="text-4xl font-bold text-brand-text-primary">Hola, {user.name || 'Cliente'}!</h1>
+        {user.email === 'barista@gmail.com' && (
+            <button className="flex items-center gap-3 text-brand-text-primary font-semibold text-lg bg-brand-surface px-5 py-3 rounded-full shadow-sm hover:shadow-md transition-shadow">
+                <span className="bg-brand-secondary text-white rounded-full h-8 w-8 flex items-center justify-center">
+                    <CheckIcon className="h-5 w-5" />
+                </span>
+                Ver Panel Barista
+            </button>
+        )}
     </header>
 );
 
@@ -121,7 +163,9 @@ const ProductCard: React.FC<{
                 {product.imageUrl ? (
                     <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
                 ) : (
-                    <div className="w-full h-full animate-pulse bg-gray-200"></div>
+                    <div className="w-full h-full flex items-center justify-center">
+                        <SpinnerIcon className="animate-spin h-8 w-8 text-brand-secondary" />
+                    </div>
                 )}
             </div>
             
@@ -261,6 +305,8 @@ function App() {
     const [isLoading, setIsLoading] = useState(true);
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
+    const [lastOrder, setLastOrder] = useState<{order: Order, items: CartItem[]} | null>(null);
+
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -271,10 +317,8 @@ function App() {
                     api.getConfirmedOrders(),
                 ]);
                 setConfirmedOrders(ordersData);
-                // Set initial product data so UI can render skeletons
                 setProducts(productsData);
 
-                // Generate images for products without one
                 const imagePromises = productsData.map(product => {
                     if (!product.imageUrl) {
                         return api.generateProductImage(product.name);
@@ -341,6 +385,9 @@ function App() {
         }
     };
 
+    const cartItems = useMemo(() => Object.values(cart).sort((a, b) => a.name.localeCompare(b.name)), [cart]);
+    const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0), [cartItems]);
+
     const handleVerifyAndSubmitOrder = async (code: string): Promise<boolean> => {
         if (!user) return false;
 
@@ -353,6 +400,7 @@ function App() {
 
         if (response.success && response.order) {
             setConfirmedOrders(prevOrders => [response.order!, ...prevOrders]);
+            setLastOrder({ order: response.order, items: cartItems });
             setCart({});
             setIsVerifying(false);
             return true;
@@ -360,9 +408,6 @@ function App() {
             return false;
         }
     };
-
-    const cartItems = useMemo(() => Object.values(cart).sort((a, b) => a.name.localeCompare(b.name)), [cart]);
-    const cartTotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0), [cartItems]);
 
     if (!user) {
       return <Login onLoginSuccess={handleLoginSuccess} />
@@ -374,7 +419,7 @@ function App() {
 
     return (
         <div className="container mx-auto p-4 sm:p-8 font-sans text-brand-text-primary">
-            <Header userName={user.name} />
+            <Header user={user} />
             <main className="grid grid-cols-1 lg:grid-cols-3 lg:gap-8">
                 <div className="lg:col-span-2 space-y-4">
                     {products.map(product => (
@@ -404,6 +449,13 @@ function App() {
                     email={user.email}
                     onClose={() => setIsVerifying(false)}
                     onSubmit={handleVerifyAndSubmitOrder}
+                />
+            )}
+             {lastOrder && (
+                <OrderSummaryModal
+                    order={lastOrder.order}
+                    items={lastOrder.items}
+                    onClose={() => setLastOrder(null)}
                 />
             )}
         </div>
