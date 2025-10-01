@@ -1,0 +1,5 @@
+{
+  "name": "Barista Coffee Pre-order",
+  "description": "An application for company employees to pre-order coffee from the on-site barista, avoiding queues. Users log in with an email code, select their coffee, and place an order to be picked up.",
+  "requestFramePermissions": []
+}
