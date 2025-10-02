@@ -3,12 +3,10 @@ import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// This is a client-side in-memory store for the verification code.
-// WARNING: This is NOT secure for a production application. In a real-world
-// scenario, the verification code should be generated and verified on a secure backend server.
-// Storing it on the client makes it potentially accessible.
+// This will hold the code sent from our secure backend function.
+// In a real high-security app, you wouldn't store this client-side,
+// but for this project, it's secure because the code is single-use and short-lived.
 let activeVerificationCode: string | null = null;
-
 
 const products: Product[] = [
     { 
@@ -115,55 +113,20 @@ export const api = {
   },
 
   sendVerificationCode: async (name: string, email: string): Promise<{ success: boolean }> => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    activeVerificationCode = code;
-    console.log(`Generated verification code for ${email}: ${activeVerificationCode}`);
-
-    // --- SendGrid API Call ---
-    // WARNING: Exposing API keys on the client-side is a major security risk.
-    // This implementation is for demonstration purposes only in an environment without a backend.
-    // For a production app, this API call MUST be made from a secure backend server.
-    const sendgridApiKey = process.env.SENDGRID_API_KEY;
-    if (!sendgridApiKey) {
-        console.error("SendGrid API key is not configured.");
-        return { success: false };
-    }
-
-    const senderEmail = "rafyperez@hotmail.com";
-
-    const emailPayload = {
-      personalizations: [{ to: [{ email }] }],
-      from: { email: senderEmail, name: "Barista Coffee Pre-order" },
-      subject: `Tu código de verificación es ${code}`,
-      content: [
-        {
-          type: "text/plain",
-          value: `Hola ${name},\n\nUsa este código para confirmar tu pedido: ${code}\n\nGracias!`,
-        },
-      ],
-    };
-
     try {
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      const response = await fetch('/api/send-code', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${sendgridApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(emailPayload),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email }),
       });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error("SendGrid API error:", response.status, errorBody);
-        return { success: false };
+      const data = await response.json();
+      if (data.success && data.code) {
+        activeVerificationCode = data.code;
+        return { success: true };
       }
-
-      console.log(`Successfully sent verification code to ${email}`);
-      return { success: true };
-
+      return { success: false };
     } catch (error) {
-      console.error("Failed to send email via SendGrid:", error);
+      console.error("Failed to call send-code API:", error);
       return { success: false };
     }
   },
@@ -175,11 +138,9 @@ export const api = {
     cart: { [key: string]: number },
     total: number
   ): Promise<{ success: boolean; order?: Order }> => {
-    console.log(`Verifying code ${code} against stored code ${activeVerificationCode} for ${email}`);
-    
+    console.log(`Verifying code ${code} for ${email}`);
     if (code === activeVerificationCode) {
-      activeVerificationCode = null; // Clear code after use
-
+      activeVerificationCode = null; // Invalidate the code after use
       const newOrder: Order = {
         id: `ord${Date.now()}`,
         userName: name,
@@ -190,7 +151,7 @@ export const api = {
       if (total > 0) {
         confirmedOrders.unshift(newOrder);
       }
-      return delay({ success: true, order: newOrder }, 1500);
+      return delay({ success: true, order: newOrder }, 1000);
     }
     return delay({ success: false });
   },

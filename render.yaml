@@ -1,0 +1,40 @@
+# This file configures the services for the Barista Coffee app on Render.com.
+# It defines two services: a backend web service for the API and a frontend static site.
+
+services:
+  # Service 1: The backend API (Node.js Express server)
+  - type: web
+    name: barista-api
+    env: node
+    plan: free
+    # Build and start commands for the server
+    buildCommand: 'npm install && npm run build:server'
+    startCommand: 'node dist/server/api/index.js'
+    # Health check to ensure the service is running
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SENDGRID_API_KEY
+        # This is a secret, so its value must be set in the Render dashboard.
+        sync: false
+      - key: API_KEY
+        # This is also a secret and must be set in the dashboard.
+        sync: false
+
+  # Service 2: The frontend (Vite Static Site)
+  - type: static_site
+    name: barista-frontend
+    plan: free
+    # Build command for the client-side application
+    buildCommand: 'npm install && npm run build:client'
+    # The directory containing the static files after build
+    staticPublishPath: ./dist/public
+    # Rewrite rule to proxy API requests to the backend service.
+    # This makes calls like `/api/send-code` from the frontend work seamlessly.
+    routes:
+      - type: rewrite
+        source: /api/:path*
+        # The destination URL is the public URL of your backend service.
+        # Render automatically creates this URL based on the service name ('barista-api').
+        destination: https://barista-api.onrender.com/api/:path*
